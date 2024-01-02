@@ -1,15 +1,17 @@
-// import axios from "axios" Если не на node.js
 const axios = require("axios");
 const http = require("http");
 const fs = require('fs');
 
 const client_id = "0ba6d2a2-d7ad-48ed-9533-fec297ce1465"
 const client_secret = "33aqFtF0G6CqIT5WhYXIaHL7r6ZjKjiK2jCnx5W5L8nnqUxCM995dK10pHDZTToB"
-const code = "def50200bdb27a1b30c632b80fcfe63388eaa2a5dea4d597be7da1dbf5018fc3fc4a15b20173fc86b7ce84b6c2940e2821abfbfb5815ae5866a346164bb2642d3b6a4b3a6615448dcdc8c2921a311b160a70562ba8b413221cdc2c1fea65d9e800f4e88b396e7ad9ec5b7840557e9fd365029be3da6633fdf2c413a8b73e22c97dfd89771874bfc08e9075bfe0f873f37b1f3408d68bd4da03e8a33c13fd43f4aceab4547d71a135cbe3fc902ccaa61512d7cdabd145d5d1cda70bc905887111b9b2703aef24abedc9af84b4663cace393fbb0e51b9ae26df867cd96d44145006d225a2c747cfa8d867abeb3a25f5176d84bde751ff1de4af24e664b12309c65b003c83042195db9e01a7cea0d8920fa9e9d2b4111614caf19d5d427b5326c3a576eecee2e4f93c3ce2ef9cd30dc4be7a1b81a7911cac9aced74b7ba15266dfa982e2728a7057490d746e8322b40ac331da1aa3b7f3970e723566edb5f80849577a5264906085b9ebdc65dc5d1374fc3335cc65ac4465204fd9ff1178689da95b9f00839e788017902960942d9a8b6fc0a6749746538330f7e71fb79fa22c22861abb3ee474c11c0776735c7cc3db00864255665bba651d661711d202dbb674267936add855d757782c58139d9ef254c115948cfa380679c9f398098c2c5d3b378e625dc84121ba1"
+const code = "def50200589a889f0d5c2bd6c5ba4a0b152a8d41db7a952cb287d3d2a84d7624fa8d71f541404c26b04b49e177fea8cff9119a284eccb61435d2720308118c98396ffa98debf804f464c28cd042286e6c64c77267ca9281aa5b1eed60c31369ca8affe29769e9c86b137138c966ec991f77b5f6741c08ab7fea1b5591db4a6313502caf70c17af6f90ffb42d291f6ee0520f683e13ed08e82d7ed059b93d5d0ef5506aa9cd21aa1408880deec02def1eedf42e14ca64af977713e3b7e956df6b93751029ff4bc2b73c1700e92e799d5242daaa57d10b0084c9bb5d1495f50dda4a702cdc27116352d2f97c1dc57b9ffc28a92ead31c4034d29cea5ea785c33749fe25012d162bda82eb12fd344537f1579e0df5431a6074b6098464e5a265cc4a2d8f8b24bd0634677c4f3aed29ef22ae25cd6172bc894b9b8e30b9c0edd7a635d4ec8066acf28e43541e1052a4ef3e6caa46208371709863cff9bdc451003c0cbb5f0c2187cfe98efddd6b3493e69f56389cc48cecd6f21747479712bbdee6f0b3ad46badd111f53cb8473a8d7f8d47f800ce61c3c1cb04a0611c162dc8429b3ffb461c27c5c714e41aad358df1ff080f9cc73e76d3e523daea7a15e6448829283b91326a66c88a80fd7a042ae1d7ff116c7bd2b5ebdd0423f58e993d370f368b15f9864d7cbb11"
 const redirect_uri = "http://localhost:3002/"
 
 const port = 3002;
 const subdomain = "https://d1vashechkin.amocrm.ru/"
+let contacts_without_leads = []
+ 
+
 
 const server = http.createServer(async (req, res) => {
     if (!fs.existsSync("access_token.txt")){
@@ -25,20 +27,38 @@ const server = http.createServer(async (req, res) => {
       })
     }
     const access_token = fs.readFileSync('access_token.txt', 'utf-8');
-    const get_clients = await axios.get(subdomain+'/api/v4/contacts?with=leads', {
-        
-        headers: {
-            'Authorization': 'Bearer ' + access_token,
-        }
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + access_token,
+      };
+    const get_contacts = await axios.get(subdomain+'/api/v4/contacts?with=leads', {
+        headers: headers
     },
-    ).then(function (response) {
-        console.log(response.data._embedded.contacts);
-        // without_leads = response.data._embedded.map((item) => {
-        //     console.log(item._embedded["leads"]) //123
-        // })
+    ).then(await function (response) {
+        let lenght_of_contacts = Object.keys(response.data._embedded.contacts).length // Создание лишних переменных не является наилучшей практикой, но мне кажется так код будет более "читабельным"
+        for (i=0; i !== lenght_of_contacts; i++){
+            if (response.data._embedded.contacts[i]._embedded["leads"]=="")
+            contacts_without_leads.push(response.data._embedded.contacts[i]["id"])
+        }
+        console.log( contacts_without_leads )
       })
+    for (i=0; i<contacts_without_leads.length; i++){
+    const create_task = axios.post(subdomain+'api/v4/tasks', [{
+        "text": "Контакт без сделки",
+        "complete_till": 1706883961,
+        "entity_id": contacts_without_leads[i],
+        "entity_type": "contacts",
+    }], {
+        headers: headers
+    }).catch(function (response) {
+        if (response.response.data["validation-errors"] != undefined ){
+        console.log(response.response.data["validation-errors"][0])
+        }
+        console.log(response.response.data)
+})
+}
 }).listen(port, 'localhost', (error) => {
-    error ? console.log(error) : console.log("Server working on: " + port)
+    error ? console.log(error[0]) : console.log("Server working on: " + port)
 })
 
 
